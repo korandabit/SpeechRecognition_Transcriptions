@@ -1,1 +1,3 @@
 # SpeechRecognition_Transcriptions
+TranscribeFiles_GoogleSpeechAPI written by Steve Schwering
+SpeechRecognitionBox written by Matt Borman
