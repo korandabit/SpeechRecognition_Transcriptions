@@ -1,4 +1,3 @@
-import time
 import os
 import sys
 import pandas
@@ -87,7 +86,6 @@ def getTranscription(audio_file,
 	+ recognizer: recognizer object through the sppech_recognition API
 	+ accountInfo: Its existence indicate whether or not to use demo credentials
 	"""
-	print(audio_file)
 	with sr.AudioFile(audio_file) as source:
 		audio = recognizer.record(source)
 	# Querying free uses
@@ -163,6 +161,7 @@ def transcribeNewFile(participant, transcriptions_participant,
 			f.write('{},{},{}\n'.format(participant.stem, file, transcriptions_participant[file]))
 
 def transcribeToFile_SRSyn(participant, transcriptions_participant, file_out,
+						   newDir = 'Data/Transcribed',
 						   trial_column = 'trialNum',
 						   transcription_column = 'recall',
 					  	   verbose = False):
@@ -184,14 +183,18 @@ def transcribeToFile_SRSyn(participant, transcriptions_participant, file_out,
 		data[transcription_column].append(transcriptions_participant[file])
 	new_df = pandas.DataFrame(data)
 	output = pandas.merge(df, new_df, on = trial_column, how = 'outer')
-	output.to_csv(str(file_out), index_label = False, index = False)
+	if newDir == None:
+		output.to_csv(str(file_out), index_label = False, index = False)
+	else:
+		output.to_csv(str(Path.cwd() / newDir / file_out.name), index_label = False, index = False)
 
 if __name__ == '__main__':
 	# Setting up
 	verbose = True
 	participant_directory = 'Data/Raw'
 	participant_directory = Path(Path.cwd() / participant_directory)
-	account_info = '/Users/StevenSchwering/GoogleSpeech_Credentials.json'
+	#account_info = '/Users/StevenSchwering/GoogleSpeech_Credentials.json'
+	account_info = None
 	data_key = 'PresentedTrials'
 	# Starting
 	setAccountInfo(account_info = account_info,
@@ -201,7 +204,6 @@ if __name__ == '__main__':
 													data_key = data_key,
 													data_extension = '.csv',
 													verbose = verbose)
-	print(data_files)
 	transcriptions = transcribe(participant_files = participant_files,
 								account_info = account_info,
 								verbose = verbose)
