@@ -4,7 +4,11 @@ import pandas
 import speech_recognition as sr
 from pathlib import Path # Requires Python 3
 
-def setAccountInfo(account_info = '/Users/StevenSchwering/GoogleSpeech_Credentials.json',
+# from google.cloud import speech
+# from google.cloud.speech import enums
+# from google.cloud.speech import types
+
+def setAccountInfo(account_info = 'koranda.json',
 				   verbose = True):
 	"""
 	Sets up account info to use Google Speech Recognition API
@@ -45,10 +49,12 @@ def getFiles(directory,
 		files = [file for file in files if need_key in file.stem]
 	return files
 
+
+									
 def getParticipants(participant_directory,
 					target_file_extension = '.wav',
 					data_key = None,
-					data_extension = '.csv',
+					data_extension = '.txt',
 					verbose = False):
 	"""
 	Takes a directory of participants and returns the target files for each participant in a dictionary
@@ -61,9 +67,10 @@ def getParticipants(participant_directory,
 		print('Getting participants and their audio files')
 	participant_files = {}
 	data_files = {}
-	participants = [participant for participant in participant_directory.glob('*') if participant.is_dir()]
+	# participants = [participant for participant in participant_directory.glob('*') if participant.is_dir()]
+	participants = [participant for participant in os.listdir(participant_directory)]
 	for participant in participants:
-		participant_files[participant] = getFiles(directory = Path(participant),
+		participant_files[participant] = getFiles(directory = Path(participant_directory)+participant,
 													   extension = target_file_extension,
 													   verbose = verbose)
 		if data_key != None:
@@ -72,14 +79,62 @@ def getParticipants(participant_directory,
 											   extension = data_extension,
 											   ignore_key = None,
 											   need_key = data_key)
-			data_files[participant] = data_files[participant][0]
+			data_files[participant] = data_files[participant]
 		else:
 			data_files[participant] = None
+	print(participant_files)
+
 	return participant_files, data_files
 
+
+# main horse
+def wav_lumps(list_of_wavs):
+	"""
+	intended use: combine audio files from given participant, 
+	keep track of original audio boundaries in combined file.
+	
+	input: list of wav files
+	output: 
+	- combined wav file, 
+	- list of (start_time,end_time) for the wavs in the combined file.
+	"""
+
+	cat_duration  = 0
+	clip_start = 0
+	clip_end = 0
+	cat_wav_arrays = []
+	cat_wav_time_boundaries = []	
+	cat_wav_list = []
+	
+	for cur_wav in participant_audio_files:
+			
+		cur_wav_path = participant_directory + participant + cur_wav
+		
+		samplerate, wav_array = wavfile.read(cur_wav_path) 
+		cat_wav_arrays.append(wav_array) # 
+		
+		# timing updates
+		clip_start = cat_duration
+		clip_duration = len(wav_array)/samplerate
+		# print(clip_duration)
+		cat_duration += clip_duration
+		clip_end = cat_duration
+		# print((clip_start,clip_end))
+		cat_wav_time_boundaries.append((clip_start,clip_end))
+		# print(cat_wav_time_boundaries)
+
+	# combine all audio files.
+	stacked_wav = np.hstack(cat_wav_arrays)
+	compiled_wav = wavfile.write('last{}.wav'.format(cur_wav),samplerate,stacked_wav)
+
+	return(compiled_wav,cat_wav_time_boundaries)
+
+				
 def getTranscription(audio_file,
 					 recognizer,
 					 account_info = None):
+	# modify this to return timestamps.
+	
 	"""
 	Takes an audio file and a 'recognizer' object and returns the transcription
 	+ audio_file: path to the audio file
@@ -100,20 +155,22 @@ def transcribe(participant_files,
 			   account_info,
 			   verbose = True):
 	"""
-	Returns transcriptions from audio files. Needs input in format of dictionary with keys as participants and values as lists of file pahts
+	Input: list of audio files
+	Returns transcriptions from audio files. 
 	+ participant_files: Input dictionary
 	+ account_info: Information about the account. None if using demo
 	"""
 	if verbose:
 		print('Getting transcriptions')
 	recognizer = sr.Recognizer()
-	transcriptions = {}
-	for participant in participant_files:
-		transcriptions[participant] = {}
-		for file in participant_files[participant]:
-			transcriptions[participant][file] = getTranscription(audio_file = str(file),
-																 recognizer = recognizer,
-																 account_info = account_info)
+
+	for file in participant_files:
+			transcriptions	= getTranscription(audio_file = file,
+												recognizer = recognizer,
+												account_info = account_info,
+												# add_new_parameters (see end of script)
+												)
+																				
 	return transcriptions
 
 def saveTranscriptions(transcriptions, data_files,
@@ -191,7 +248,7 @@ def transcribeToFile_SRSyn(participant, transcriptions_participant, file_out,
 if __name__ == '__main__':
 	# Setting up
 	verbose = True
-	participant_directory = 'Data/Raw'
+	participant_directory = 'participants/'
 	participant_directory = Path(Path.cwd() / participant_directory)
 	#account_info = '/Users/StevenSchwering/GoogleSpeech_Credentials.json'
 	account_info = None
@@ -204,8 +261,43 @@ if __name__ == '__main__':
 													data_key = data_key,
 													data_extension = '.csv',
 													verbose = verbose)
-	transcriptions = transcribe(participant_files = participant_files,
+	compiled_wav,cat_wav_time_boundaries = wav_lumps(participant_files)
+	transcriptions = transcribe(participant_files = [compiled_wav],
 								account_info = account_info,
 								verbose = verbose)
 	saveTranscriptions(transcriptions = transcriptions,
-					   data_files = data_files)
+					   data_files = data_files) # add cat_wav_time_boundaries here
+
+# def transcribe_gcs_with_word_time_offsets(gcs_uri):
+    # """Transcribe the given audio file asynchronously and output the word time
+    # offsets."""
+    # from google.cloud import speech
+    # from google.cloud.speech import enums
+    # from google.cloud.speech import types
+    # client = speech.SpeechClient()
+
+    # audio = types.RecognitionAudio(uri=gcs_uri)
+    # config = types.RecognitionConfig(
+        # encoding=enums.RecognitionConfig.AudioEncoding.FLAC,
+        # sample_rate_hertz=16000,
+        # language_code='en-US',
+        # enable_word_time_offsets=True)
+
+    # operation = client.long_running_recognize(config, audio)
+
+    # print('Waiting for operation to complete...')
+    # result = operation.result(timeout=90)
+
+    # for result in result.results:
+        # alternative = result.alternatives[0]
+        # print(u'Transcript: {}'.format(alternative.transcript))
+        # print('Confidence: {}'.format(alternative.confidence))
+
+        # for word_info in alternative.words:
+            # word = word_info.word
+            # start_time = word_info.start_time
+            # end_time = word_info.end_time
+            # print('Word: {}, start_time: {}, end_time: {}'.format(
+                # word,
+                # start_time.seconds + start_time.nanos * 1e-9,
+                # end_time.seconds + end_time.nanos * 1e-9))
